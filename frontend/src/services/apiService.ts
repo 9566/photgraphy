@@ -40,7 +40,7 @@ const saveData = (key: string, data: any) => sessionStorage.setItem(key, JSON.st
 // --- MOCK DATA STORE ---
 const defaultAdminUser: Omit<User, 'id'> & { password?: string } = {
   name: 'Admin',
-  email: 'contact@prstudio.co.in',
+  email: CONTACT_INFO.email,
   password: '123456',
   role: 'admin',
   phone: CONTACT_INFO.phones[0],
@@ -54,12 +54,6 @@ let mockContacts = initStorage<ContactSubmission[]>('mock_contacts', []);
 let mockFeedbackList = initStorage<Feedback[]>('mock_feedback', [
     {id: 1, name: 'Sathish Kumar', rating: 5, review: 'Absolutely stunning wedding photos!', timestamp: new Date().toISOString()},
 ]);
-const INITIAL_SITE_CONTENT = {
-    aboutIntro: 'A passionate photographer from Namakkal with over a decade of experience in capturing life\'s most precious moments. My journey began with a simple film camera, a gift from my father, which ignited a lifelong passion for storytelling through images. I specialize in weaving narratives, whether it’s the fairytale romance of a wedding, the raw energy of a fashion shoot, or the quiet intimacy of a newborn\'s first days. My style is a blend of cinematic and photojournalistic, focusing on authentic emotions and stunning visuals. I believe that a great photograph is not just seen, but felt.',
-    homeHeroTitle: `Capturing Life's Moments`,
-    homeHeroSubtitle: `From wedding vows to newborn smiles, we frame your memories with artistry and passion.`
-};
-let mockSiteContent = initStorage<typeof INITIAL_SITE_CONTENT>('mock_site_content', INITIAL_SITE_CONTENT);
 
 
 // --- API FUNCTIONS ---
@@ -88,12 +82,14 @@ export const getPortfolio = (): Promise<PortfolioCategory[]> => {
     return mockApi(categoriesShell);
 };
 
+export const getFullPortfolio = (): Promise<PortfolioCategory[]> => mockApi(mockPortfolio);
+
 export const getPhotosByCategory = (category: string): Promise<Photo[]> => {
     const categoryData = mockPortfolio.find(c => c.id === category);
     return mockApi(categoryData ? categoryData.photos : []);
 };
 
-export const uploadPhoto = (file: File, category: string): Promise<Photo> => {
+export const uploadPhoto = (file: File, category: string, name: string): Promise<Photo> => {
     return new Promise((resolve, reject) => {
         const categoryData = mockPortfolio.find(c => c.id === category);
         if (!categoryData) {
@@ -106,6 +102,7 @@ export const uploadPhoto = (file: File, category: string): Promise<Photo> => {
             const newPhoto: Photo = {
                 id: Date.now(),
                 url: reader.result as string,
+                name,
             };
             categoryData.photos.push(newPhoto);
             saveData('mock_portfolio', mockPortfolio);
@@ -125,15 +122,6 @@ export const deletePhoto = (photoId: number): Promise<void> => {
     });
     saveData('mock_portfolio', mockPortfolio);
     return mockApi(undefined);
-};
-
-// Site Content Management
-export const getSiteContent = (): Promise<typeof INITIAL_SITE_CONTENT> => mockApi(mockSiteContent);
-
-export const updateSiteContent = (content: typeof INITIAL_SITE_CONTENT): Promise<typeof INITIAL_SITE_CONTENT> => {
-    mockSiteContent = { ...mockSiteContent, ...content };
-    saveData('mock_site_content', mockSiteContent);
-    return mockApi(mockSiteContent);
 };
 
 // Form Submissions

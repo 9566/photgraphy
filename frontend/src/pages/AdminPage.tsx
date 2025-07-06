@@ -1,14 +1,12 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import type { ContactSubmission, Feedback, Service } from '../types';
+import type { ContactSubmission, Feedback, Service, PortfolioCategory, Photo } from '../types';
 import * as api from '../services/apiService';
 import { PageWrapper } from '../components/PageWrapper';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorMessage } from '../components/ErrorMessage';
 import { ICONS } from '../constants';
-import { HomeNavbar } from '../components/HomeNavbar';
 
 export const AdminPage: React.FC = () => {
     const { user, updateUserContext } = useAuth();
@@ -16,34 +14,40 @@ export const AdminPage: React.FC = () => {
     const [contactSubmissions, setContactSubmissions] = useState<ContactSubmission[]>([]);
     const [feedback, setFeedback] = useState<Feedback[]>([]);
     const [services, setServices] = useState<Service[]>([]);
+    const [portfolio, setPortfolio] = useState<PortfolioCategory[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string|null>(null);
     
-    const [activeTab, setActiveTab] = useState<'submissions' | 'feedback' | 'portfolio' | 'services' | 'profile' | 'export' | 'content'>('profile');
+    const [activeTab, setActiveTab] = useState<'profile' | 'submissions' | 'feedback' | 'portfolio' | 'services' | 'export'>('portfolio');
 
     const [newService, setNewService] = useState({ name: '', description: '', basePrice: 0, discount: 0 });
     const [showAddServiceForm, setShowAddServiceForm] = useState(false);
     
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [profileData, setProfileData] = useState({ email: user?.email || '', phone: user?.phone || '' });
-    
-    const [siteContent, setSiteContent] = useState({ aboutIntro: '', homeHeroTitle: '', homeHeroSubtitle: '' });
-    const [isSavingContent, setIsSavingContent] = useState(false);
+
+    // Portfolio state
+    const [newPhoto, setNewPhoto] = useState({ name: '', categoryId: '', file: null as File | null });
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
 
     const fetchData = useCallback(async () => {
         try {
             setIsLoading(true);
-            const [subs, fdb, srvs, content] = await Promise.all([
+            const [subs, fdb, srvs, portfolioData] = await Promise.all([
                 api.getContactSubmissions(),
                 api.getFeedback(),
                 api.getServices(),
-                api.getSiteContent()
+                api.getFullPortfolio()
             ]);
             setContactSubmissions(subs || []);
             setFeedback(fdb || []);
             setServices(srvs || []);
-            setSiteContent(content || { aboutIntro: '', homeHeroTitle: '', homeHeroSubtitle: '' });
+            setPortfolio(portfolioData || []);
+            if (portfolioData && portfolioData.length > 0 && !newPhoto.categoryId) {
+                 setNewPhoto(p => ({...p, categoryId: portfolioData[0].id}));
+            }
             setError(null);
         } catch(e) {
             setError("Failed to load admin data. Ensure the backend is running.");
@@ -51,7 +55,7 @@ export const AdminPage: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [newPhoto.categoryId]);
 
     useEffect(() => {
         fetchData();
@@ -114,17 +118,49 @@ export const AdminPage: React.FC = () => {
         }
     };
     
-    const handleSiteContentUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
+    const handlePhotoUpload = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSavingContent(true);
+        if (!newPhoto.file || !newPhoto.name || !newPhoto.categoryId) {
+            alert("Please fill out all fields: Photo Name, Category, and select a file.");
+            return;
+        }
+        setIsUploading(true);
         try {
-            await api.updateSiteContent(siteContent);
-            alert("Content updated successfully!");
+            const uploadedPhoto = await api.uploadPhoto(newPhoto.file, newPhoto.categoryId, newPhoto.name);
+            setPortfolio(currentPortfolio => {
+                return currentPortfolio.map(cat => {
+                    if (cat.id === newPhoto.categoryId) {
+                        return { ...cat, photos: [...cat.photos, uploadedPhoto] };
+                    }
+                    return cat;
+                });
+            });
+            // Reset form
+            setNewPhoto(p => ({ ...p, name: '', file: null }));
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            alert("Photo uploaded successfully!");
         } catch (error) {
-            console.error("Failed to update site content:", error);
-            alert("Failed to update content.");
+            console.error(error);
+            alert("Failed to upload photo.");
         } finally {
-            setIsSavingContent(false);
+            setIsUploading(false);
+        }
+    };
+
+    const handlePhotoDelete = async (photoId: number) => {
+        if (!window.confirm("Are you sure you want to delete this photo?")) return;
+        try {
+            await api.deletePhoto(photoId);
+            setPortfolio(currentPortfolio => 
+                currentPortfolio.map(cat => ({
+                    ...cat,
+                    photos: cat.photos.filter(p => p.id !== photoId),
+                }))
+            );
+            alert("Photo deleted successfully.");
+        } catch (error) {
+            console.error(error);
+            alert("Failed to delete photo.");
         }
     };
 
@@ -187,37 +223,6 @@ export const AdminPage: React.FC = () => {
         }
     };
 
-    const handleExportFeedback = async () => {
-        try {
-            const feedbackToExport = await api.getFeedback();
-            if (feedbackToExport.length === 0) {
-                alert("There is no feedback to export.");
-                return;
-            }
-            const headers = "ID,Timestamp,Name,Rating,Review";
-            const csvContent = [
-                headers,
-                ...feedbackToExport.map(f => {
-                    const review = `"${f.review.replace(/"/g, '""')}"`;
-                    return `${f.id},"${new Date(f.timestamp).toLocaleString()}","${f.name}",${f.rating},${review}`;
-                })
-            ].join('\n');
-            
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", "feedback.csv");
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        } catch (error) {
-            console.error("Failed to export feedback data:", error);
-            alert("Could not export feedback data.");
-        }
-    };
-
 
     const AdminTabButton: React.FC<{tabId: any, children: React.ReactNode}> = ({ tabId, children }) => (
         <button
@@ -232,17 +237,14 @@ export const AdminPage: React.FC = () => {
     if (error) return <PageWrapper title="Admin"><ErrorMessage message={error}/></PageWrapper>;
 
     return (
-        <>
-        <HomeNavbar/>
         <PageWrapper title="Admin Dashboard">
             <h1 className="text-5xl font-bold mb-6 text-brand-primary">Admin Dashboard</h1>
             
             <div className="border-b border-gray-700 mb-8 flex flex-wrap">
+                <AdminTabButton tabId="portfolio">Portfolio</AdminTabButton>
                 <AdminTabButton tabId="profile">Profile</AdminTabButton>
-                <AdminTabButton tabId="content">Content</AdminTabButton>
                 <AdminTabButton tabId="submissions">Submissions</AdminTabButton>
                 <AdminTabButton tabId="feedback">Feedback</AdminTabButton>
-                <AdminTabButton tabId="portfolio">Portfolio</AdminTabButton>
                 <AdminTabButton tabId="services">Services</AdminTabButton>
                 <AdminTabButton tabId="export">Export</AdminTabButton>
             </div>
@@ -279,30 +281,50 @@ export const AdminPage: React.FC = () => {
                         </div>
                     </div>
                 )}
-                 {activeTab === 'content' && (
+                 {activeTab === 'portfolio' && (
                     <div>
-                        <h2 className="text-2xl font-bold mb-4">Manage Website Content</h2>
-                        <p className="text-gray-400 mb-6">Edit the text content for various pages on the site.</p>
-                        <form onSubmit={handleSiteContentUpdate} className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium text-brand-text mb-2">Home Page - Hero Title</label>
-                                <input type="text" value={siteContent.homeHeroTitle} onChange={e => setSiteContent({...siteContent, homeHeroTitle: e.target.value})} className="w-full p-2 bg-gray-800 rounded"/>
+                        <h2 className="text-2xl font-bold mb-6">Manage Portfolio</h2>
+                        
+                        {/* Upload Form */}
+                        <form onSubmit={handlePhotoUpload} className="bg-gray-800 p-6 rounded-lg mb-8 space-y-4">
+                            <h3 className="text-xl font-semibold">Upload New Photo</h3>
+                            <div className="grid md:grid-cols-3 gap-4">
+                                <input type="text" placeholder="Photo Name (e.g. Shoot 1)" value={newPhoto.name} onChange={e => setNewPhoto({...newPhoto, name: e.target.value})} className="w-full p-3 bg-gray-700 rounded-md border border-gray-600 focus:ring-brand-primary focus:border-brand-primary" required />
+                                <select value={newPhoto.categoryId} onChange={e => setNewPhoto({...newPhoto, categoryId: e.target.value})} className="w-full p-3 bg-gray-700 rounded-md border border-gray-600 focus:ring-brand-primary focus:border-brand-primary" required>
+                                    {portfolio.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                                </select>
+                                <input type="file" ref={fileInputRef} onChange={e => setNewPhoto({...newPhoto, file: e.target.files?.[0] || null})} className="w-full p-2 bg-gray-700 rounded-md border border-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-primary file:text-brand-bg hover:file:bg-opacity-90" accept="image/*" required />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-brand-text mb-2">Home Page - Hero Subtitle</label>
-                                <textarea value={siteContent.homeHeroSubtitle} onChange={e => setSiteContent({...siteContent, homeHeroSubtitle: e.target.value})} className="w-full p-2 bg-gray-800 rounded" rows={3}></textarea>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-brand-text mb-2">About Page - Introduction</label>
-                                <textarea value={siteContent.aboutIntro} onChange={e => setSiteContent({...siteContent, aboutIntro: e.target.value})} className="w-full p-2 bg-gray-800 rounded" rows={8}></textarea>
-                            </div>
-                            <div>
-                                <button type="submit" disabled={isSavingContent} className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:bg-gray-500 flex items-center gap-2">
-                                    {isSavingContent ? ICONS.spinner() : null}
-                                    Save Content
-                                </button>
-                            </div>
+                             <button type="submit" disabled={isUploading} className="bg-brand-primary text-brand-bg font-bold py-2 px-6 rounded-lg hover:bg-opacity-90 disabled:bg-gray-500 flex items-center justify-center gap-2">
+                                {isUploading ? <>{ICONS.spinner()} Uploading...</> : 'Upload Photo'}
+                            </button>
                         </form>
+
+                        {/* Photo Gallery */}
+                        <div className="space-y-6">
+                            {portfolio.map(category => (
+                                <div key={category.id}>
+                                    <h3 className="text-xl font-semibold mb-3 border-b border-gray-600 pb-2">{category.name}</h3>
+                                    {category.photos.length > 0 ? (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                            {[...category.photos].reverse().map(photo => (
+                                                <div key={photo.id} className="relative group bg-gray-800 rounded-lg overflow-hidden">
+                                                    <img src={photo.url} alt={photo.name} className="w-full h-32 object-cover" />
+                                                    <div className="p-2">
+                                                        <p className="text-sm font-semibold truncate" title={photo.name}>{photo.name}</p>
+                                                    </div>
+                                                    <button onClick={() => handlePhotoDelete(photo.id)} className="absolute top-1 right-1 bg-red-600/80 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600" title="Delete Photo">
+                                                        {ICONS.trash('h-4 w-4')}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-gray-500">No photos in this category yet.</p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
                 {activeTab === 'submissions' && (
@@ -335,14 +357,6 @@ export const AdminPage: React.FC = () => {
                                 </div>
                             )) : <p>No feedback submitted yet.</p>}
                         </div>
-                    </div>
-                )}
-                
-                {activeTab === 'portfolio' && (
-                    <div>
-                        <h2 className="text-2xl font-bold mb-4">Manage Portfolio</h2>
-                        <p className="text-gray-400">Portfolio categories are defined statically in the frontend code.</p>
-                        <p className="text-gray-400 mt-2">To add or remove photos, please navigate to the specific <Link to="/portfolio" className="text-brand-primary underline">portfolio category page</Link> and use the 'Add Photo' or 'Delete' buttons available there.</p>
                     </div>
                 )}
 
@@ -387,26 +401,19 @@ export const AdminPage: React.FC = () => {
                 {activeTab === 'export' && (
                     <div>
                         <h2 className="text-2xl font-bold mb-4">Export Data</h2>
-                        <div className="flex flex-col gap-6">
-                            <div className="bg-gray-800 p-6 rounded-lg">
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <div className="flex-1 bg-gray-800 p-6 rounded-lg">
                                 <h3 className="xACtext-xl font-semibold mb-2">User Data</h3>
                                 <p className="text-gray-400 mb-4">Download a CSV file of all registered admin users.</p>
                                 <button onClick={handleExportUsers} className="bg-green-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-800 transition-colors w-full sm:w-auto">
                                     Download Users (.csv)
                                 </button>
                             </div>
-                            <div className="bg-gray-800 p-6 rounded-lg">
+                            <div className="flex-1 bg-gray-800 p-6 rounded-lg">
                                 <h3 className="text-xl font-semibold mb-2">Contact Submissions</h3>
                                 <p className="text-gray-400 mb-4">Download a CSV file of all enquiries from the contact form.</p>
                                 <button onClick={handleExportSubmissions} className="bg-sky-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-sky-800 transition-colors w-full sm:w-auto">
                                     Download Submissions (.csv)
-                                </button>
-                            </div>
-                             <div className="bg-gray-800 p-6 rounded-lg">
-                                <h3 className="text-xl font-semibold mb-2">Client Feedback</h3>
-                                <p className="text-gray-400 mb-4">Download a CSV file of all client feedback and reviews.</p>
-                                <button onClick={handleExportFeedback} className="bg-purple-700 text-white font-bold py-3 px-6 rounded-lg hover:bg-purple-800 transition-colors w-full sm:w-auto">
-                                    Download Feedback (.csv)
                                 </button>
                             </div>
                         </div>
@@ -414,6 +421,5 @@ export const AdminPage: React.FC = () => {
                 )}
             </div>
         </PageWrapper>
-        </>
     );
 };

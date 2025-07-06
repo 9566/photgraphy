@@ -40,8 +40,6 @@ export const PortfolioCategoryPage: React.FC = () => {
         }
     }, [categoryId]);
 
-    console.log(photos);
-
     useEffect(() => {
         fetchPhotos();
     }, [fetchPhotos]);
@@ -66,9 +64,21 @@ export const PortfolioCategoryPage: React.FC = () => {
         const file = event.target.files?.[0];
         if (!file || !categoryId) return;
 
+        const defaultName = file.name.replace(/\.[^/.]+$/, "");
+        const photoName = window.prompt("Enter a name for this photo:", defaultName);
+        
+        // Reset file input value so the same file can be selected again
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+        
+        if (!photoName) {
+            return; // User cancelled the prompt
+        }
+
         setIsUploading(true);
         try {
-            const newPhoto = await api.uploadPhoto(file, categoryId);
+            const newPhoto = await api.uploadPhoto(file, categoryId, photoName);
             setPhotos(prevPhotos => [...prevPhotos, newPhoto]);
             alert("Photo added successfully.");
         } catch (error) {
@@ -76,9 +86,6 @@ export const PortfolioCategoryPage: React.FC = () => {
             alert("Failed to add photo.");
         } finally {
             setIsUploading(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = ''; // Reset file input
-            }
         }
     };
 
@@ -127,11 +134,16 @@ export const PortfolioCategoryPage: React.FC = () => {
 
             {!isLoading && !error && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {photos.map((photo, index) => (
+                    {photos.map((photo) => (
                         <div key={photo.id} className="flex flex-col gap-2">
-                            <img src={photo.url} onError={handleImageError} alt={`${categoryName} sample ${index + 1}`} className="w-full h-auto object-cover rounded-lg aspect-[4/3] shadow-lg" />
+                             <div className="relative group overflow-hidden rounded-lg">
+                                <img src={photo.url} onError={handleImageError} alt={photo.name} className="w-full h-auto object-cover aspect-[4/3] shadow-lg transition-transform duration-300 group-hover:scale-105" />
+                                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+                                    <p className="text-white font-bold text-lg truncate" title={photo.name}>{photo.name}</p>
+                                </div>
+                            </div>
                             {user?.role === 'admin' && (
-                               <button onClick={()=> handlePhotoDelete(photo.id)} className="flex items-center justify-center gap-2 self-center bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 text-sm transition-colors" title="Delete Photo">
+                               <button onClick={() => handlePhotoDelete(photo.id)} className="flex items-center justify-center gap-2 self-center bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 text-sm transition-colors" title="Delete Photo">
                                     {ICONS.trash('h-4 w-4')}
                                     <span>Delete</span>
                                 </button>

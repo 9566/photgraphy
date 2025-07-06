@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import {  NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { CONTACT_INFO, ICONS } from '../constants';
 
@@ -24,21 +24,12 @@ export const Navbar: React.FC = () => {
     <nav className="bg-black sticky top-0 z-50 shadow-lg shadow-black/30 border-b border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
-          <div
-  onClick={() => {
-    if (user?.role === 'admin') {
-      return;
-    }
-    navigate('/login');
-  }}
-  className="text-white flex items-center gap-3 group cursor-pointer"
->
-  {ICONS.camera('h-7 w-7 text-brand-primary group-hover:text-white transition-colors duration-300')}
-  <span className="text-xl font-bold tracking-wider text-white group-hover:text-brand-primary transition-colors duration-300">
-    {CONTACT_INFO.studioName}
-  </span>
-</div>
-
+          <div className="flex-shrink-0">
+            <Link to="/" className="text-white flex items-center gap-3 group">
+              {ICONS.camera('h-7 w-7 text-brand-primary group-hover:text-white transition-colors duration-300')}
+              <span className="text-xl font-bold tracking-wider text-white group-hover:text-brand-primary transition-colors duration-300">{CONTACT_INFO.studioName}</span>
+            </Link>
+          </div>
           <div className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-4">
               <NavLink to="/" className={navLinkClass}>Home</NavLink>
@@ -55,7 +46,7 @@ export const Navbar: React.FC = () => {
                       <button onClick={handleLogout} className="py-2 px-3 rounded-md text-sm font-medium transition-colors duration-300 bg-red-600 text-white hover:bg-red-700">Logout</button>
                     </div>
                 ) : (
-                  <></>
+                  <NavLink to="/login" className="py-2 px-4 rounded-md text-sm font-medium transition-colors duration-300 bg-brand-primary text-brand-bg hover:bg-opacity-90">Login</NavLink>
                 )}
                </div>
             </div>
@@ -85,7 +76,7 @@ export const Navbar: React.FC = () => {
                 <button onClick={() => { handleLogout(); setIsOpen(false); }} className="w-full text-left block py-2 px-4 rounded-md text-base font-medium bg-red-600 text-white hover:bg-red-700">Logout</button>
                </>
             ) : (
-              <></>
+              <NavLink to="/login" className={mobileNavLinkClass} onClick={() => setIsOpen(false)}>Login</NavLink>
             )}
           </div>
         </div>

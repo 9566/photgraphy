@@ -4,44 +4,23 @@ import { Link } from 'react-router-dom';
 import * as api from '../services/apiService';
 import type { PortfolioCategory, Feedback } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Navbar } from '../components/Navbar';
 
 export const HomePage: React.FC = () => {
-    const [data, setData] = useState<{
-        categories: PortfolioCategory[], 
-        feedback: Feedback[], 
-        content: { homeHeroTitle: string, homeHeroSubtitle: string } 
-    } | null>(null);
+    const [data, setData] = useState<{categories: PortfolioCategory[], feedback: Feedback[] } | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-
 
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setIsLoading(true);
-                const [categories, feedback, content] = await Promise.all([
+                const [categories, feedback] = await Promise.all([
                     api.getPortfolio(),
-                    api.getFeedback(),
-                    api.getSiteContent(),
+                    api.getFeedback(), 
                 ]);
-                setData({ 
-                    categories: categories || [], 
-                    feedback: feedback || [],
-                    content: {
-                        homeHeroTitle: content.homeHeroTitle,
-                        homeHeroSubtitle: content.homeHeroSubtitle
-                    }
-                });
+                setData({ categories: categories || [], feedback: feedback || [] });
             } catch (error) {
                 console.error("Failed to fetch home page data", error);
-                setData({ 
-                    categories: [], 
-                    feedback: [],
-                    content: { 
-                        homeHeroTitle: "Capturing Life's Moments", 
-                        homeHeroSubtitle: "From wedding vows to newborn smiles, we frame your memories with artistry and passion."
-                    }
-                });
+                setData({ categories: [], feedback: [] }); // Set empty data on error
             } finally {
                 setIsLoading(false);
             }
@@ -50,19 +29,13 @@ export const HomePage: React.FC = () => {
     }, []);
 
     return (
-        <>
-        <Navbar/>
         <div className="flex-grow">
             <div className="relative h-[80vh] min-h-[500px] flex items-center justify-center text-center text-white -mt-20">
                 <div className="absolute inset-0 bg-black opacity-50 z-10"></div>
                 <img src="https://picsum.photos/seed/hero/1920/1080" alt="Hero background" className="absolute inset-0 w-full h-full object-cover"/>
                 <div className="relative z-20 p-4">
-                    <h1 className="text-5xl md:text-7xl font-bold mb-4 drop-shadow-lg">
-                        {data?.content.homeHeroTitle || "Capturing Life's Moments"}
-                    </h1>
-                    <p className="text-lg md:text-xl max-w-2xl mx-auto drop-shadow-md">
-                        {data?.content.homeHeroSubtitle || "From wedding vows to newborn smiles, we frame your memories with artistry and passion."}
-                    </p>
+                    <h1 className="text-5xl md:text-7xl font-bold mb-4 drop-shadow-lg">Capturing Life's Moments</h1>
+                    <p className="text-lg md:text-xl max-w-2xl mx-auto drop-shadow-md">From wedding vows to newborn smiles, we frame your memories with artistry and passion.</p>
                     <Link to="/portfolio" className="mt-8 inline-block bg-brand-primary text-brand-bg font-bold py-3 px-8 rounded-lg text-lg hover:bg-opacity-90 transition-all duration-300 transform hover:scale-105">
                         View My Work
                     </Link>
@@ -113,6 +86,5 @@ export const HomePage: React.FC = () => {
                 </>
             )}
         </div>
-        </>
     );
 };
